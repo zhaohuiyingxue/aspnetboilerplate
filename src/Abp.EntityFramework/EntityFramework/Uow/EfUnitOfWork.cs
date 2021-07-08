@@ -3,13 +3,14 @@ using System.Collections.Immutable;
 using System.Data.Entity;
 using System.Data.Entity.Core.Objects;
 using System.Data.Entity.Infrastructure;
+using System.Linq;
 using System.Threading.Tasks;
-using System.Transactions;
 using Abp.Dependency;
 using Abp.Domain.Uow;
 using Abp.EntityFramework.Utils;
 using Abp.Extensions;
 using Abp.MultiTenancy;
+using Abp.Timing;
 using Castle.Core.Internal;
 
 namespace Abp.EntityFramework.Uow
@@ -19,13 +20,12 @@ namespace Abp.EntityFramework.Uow
     /// </summary>
     public class EfUnitOfWork : UnitOfWorkBase, ITransientDependency
     {
-        protected IDictionary<string, DbContext> ActiveDbContexts { get; private set; }
+        protected IDictionary<string, DbContext> ActiveDbContexts { get; }
+        protected IIocResolver IocResolver { get; }
 
-        protected IIocResolver IocResolver { get; private set; }
-
-        protected TransactionScope CurrentTransaction;
         private readonly IDbContextResolver _dbContextResolver;
         private readonly IDbContextTypeMatcher _dbContextTypeMatcher;
+        private readonly IEfTransactionStrategy _transactionStrategy;
 
         /// <summary>
         /// Creates a new <see cref="EfUnitOfWork"/>.
@@ -35,50 +35,41 @@ namespace Abp.EntityFramework.Uow
             IConnectionStringResolver connectionStringResolver,
             IDbContextResolver dbContextResolver,
             IEfUnitOfWorkFilterExecuter filterExecuter,
-            IUnitOfWorkDefaultOptions defaultOptions, 
-            IDbContextTypeMatcher dbContextTypeMatcher)
+            IUnitOfWorkDefaultOptions defaultOptions,
+            IDbContextTypeMatcher dbContextTypeMatcher,
+            IEfTransactionStrategy transactionStrategy)
             : base(
-                  connectionStringResolver, 
-                  defaultOptions,
-                  filterExecuter)
+                connectionStringResolver,
+                defaultOptions,
+                filterExecuter)
         {
             IocResolver = iocResolver;
             _dbContextResolver = dbContextResolver;
             _dbContextTypeMatcher = dbContextTypeMatcher;
+            _transactionStrategy = transactionStrategy;
 
-            ActiveDbContexts = new Dictionary<string, DbContext>();
+            ActiveDbContexts = new Dictionary<string, DbContext>(System.StringComparer.OrdinalIgnoreCase);
         }
 
         protected override void BeginUow()
         {
             if (Options.IsTransactional == true)
             {
-                var transactionOptions = new TransactionOptions
-                {
-                    IsolationLevel = Options.IsolationLevel.GetValueOrDefault(IsolationLevel.ReadUncommitted),
-                };
-
-                if (Options.Timeout.HasValue)
-                {
-                    transactionOptions.Timeout = Options.Timeout.Value;
-                }
-
-                CurrentTransaction = new TransactionScope(
-                    Options.Scope.GetValueOrDefault(TransactionScopeOption.Required),
-                    transactionOptions,
-                    Options.AsyncFlowOption.GetValueOrDefault(TransactionScopeAsyncFlowOption.Enabled)
-                    );
+                _transactionStrategy.InitOptions(Options);
             }
         }
 
         public override void SaveChanges()
         {
-            ActiveDbContexts.Values.ForEach(SaveChangesInDbContext);
+            foreach (var dbContext in GetAllActiveDbContexts())
+            {
+                SaveChangesInDbContext(dbContext);
+            }
         }
 
         public override async Task SaveChangesAsync()
         {
-            foreach (var dbContext in ActiveDbContexts.Values)
+            foreach (var dbContext in GetAllActiveDbContexts())
             {
                 await SaveChangesInDbContextAsync(dbContext);
             }
@@ -92,66 +83,131 @@ namespace Abp.EntityFramework.Uow
         protected override void CompleteUow()
         {
             SaveChanges();
-            if (CurrentTransaction != null)
-            {
-                CurrentTransaction.Complete();
-            }
 
-            DisposeUow();
+            if (Options.IsTransactional == true)
+            {
+                _transactionStrategy.Commit();
+            }
         }
 
         protected override async Task CompleteUowAsync()
         {
             await SaveChangesAsync();
-            if (CurrentTransaction != null)
-            {
-                CurrentTransaction.Complete();
-            }
 
-            DisposeUow();
+            if (Options.IsTransactional == true)
+            {
+                _transactionStrategy.Commit();
+            }
         }
 
-        public virtual TDbContext GetOrCreateDbContext<TDbContext>(MultiTenancySides? multiTenancySide = null)
+        public virtual TDbContext GetOrCreateDbContext<TDbContext>(MultiTenancySides? multiTenancySide = null,
+            string name = null)
             where TDbContext : DbContext
         {
             var concreteDbContextType = _dbContextTypeMatcher.GetConcreteType(typeof(TDbContext));
 
-            var connectionStringResolveArgs = new ConnectionStringResolveArgs(multiTenancySide);
-            connectionStringResolveArgs["DbContextType"] = typeof(TDbContext);
-            connectionStringResolveArgs["DbContextConcreteType"] = concreteDbContextType;
+            var connectionStringResolveArgs = new ConnectionStringResolveArgs(multiTenancySide)
+            {
+                ["DbContextType"] = typeof(TDbContext),
+                ["DbContextConcreteType"] = concreteDbContextType
+            };
+
             var connectionString = ResolveConnectionString(connectionStringResolveArgs);
 
             var dbContextKey = concreteDbContextType.FullName + "#" + connectionString;
-
-            DbContext dbContext;
-            if (!ActiveDbContexts.TryGetValue(dbContextKey, out dbContext))
+            if (name != null)
             {
-
-                dbContext = _dbContextResolver.Resolve<TDbContext>(connectionString);
-
-                ((IObjectContextAdapter)dbContext).ObjectContext.ObjectMaterialized += (sender, args) =>
-                {
-                    ObjectContext_ObjectMaterialized(dbContext, args);
-                };
-
-                FilterExecuter.As<IEfUnitOfWorkFilterExecuter>().ApplyCurrentFilters(this, dbContext);
-
-                ActiveDbContexts[dbContextKey] = dbContext;
+                dbContextKey += "#" + name;
             }
 
-            return (TDbContext)dbContext;
+            if (ActiveDbContexts.TryGetValue(dbContextKey, out var dbContext))
+            {
+                return (TDbContext) dbContext;
+            }
+
+            if (Options.IsTransactional == true)
+            {
+                dbContext = _transactionStrategy.CreateDbContext<TDbContext>(connectionString, _dbContextResolver);
+            }
+            else
+            {
+                dbContext = _dbContextResolver.Resolve<TDbContext>(connectionString);
+            }
+
+            if (dbContext is IShouldInitializeDcontext abpDbContext)
+            {
+                abpDbContext.Initialize(new AbpEfDbContextInitializationContext(this));
+            }
+
+            FilterExecuter.As<IEfUnitOfWorkFilterExecuter>().ApplyCurrentFilters(this, dbContext);
+
+            ActiveDbContexts[dbContextKey] = dbContext;
+
+            return (TDbContext) dbContext;
+        }
+
+        public virtual async Task<TDbContext> GetOrCreateDbContextAsync<TDbContext>(
+            MultiTenancySides? multiTenancySide = null, string name = null)
+            where TDbContext : DbContext
+        {
+            var concreteDbContextType = _dbContextTypeMatcher.GetConcreteType(typeof(TDbContext));
+
+            var connectionStringResolveArgs = new ConnectionStringResolveArgs(multiTenancySide)
+            {
+                ["DbContextType"] = typeof(TDbContext),
+                ["DbContextConcreteType"] = concreteDbContextType
+            };
+
+            var connectionString = await ResolveConnectionStringAsync(connectionStringResolveArgs);
+
+            var dbContextKey = concreteDbContextType.FullName + "#" + connectionString;
+            if (name != null)
+            {
+                dbContextKey += "#" + name;
+            }
+
+            if (ActiveDbContexts.TryGetValue(dbContextKey, out var dbContext))
+            {
+                return (TDbContext) dbContext;
+            }
+
+            if (Options.IsTransactional == true)
+            {
+                dbContext = await _transactionStrategy
+                    .CreateDbContextAsync<TDbContext>(connectionString, _dbContextResolver);
+            }
+            else
+            {
+                dbContext = _dbContextResolver.Resolve<TDbContext>(connectionString);
+            }
+
+            if (dbContext is IShouldInitializeDcontext abpDbContext)
+            {
+                abpDbContext.Initialize(new AbpEfDbContextInitializationContext(this));
+            }
+
+            FilterExecuter.As<IEfUnitOfWorkFilterExecuter>().ApplyCurrentFilters(this, dbContext);
+
+            ActiveDbContexts[dbContextKey] = dbContext;
+
+            return (TDbContext) dbContext;
         }
 
         protected override void DisposeUow()
         {
-            ActiveDbContexts.Values.ForEach(Release);
-            ActiveDbContexts.Clear();
-
-            if (CurrentTransaction != null)
+            if (Options.IsTransactional == true)
             {
-                CurrentTransaction.Dispose();
-                CurrentTransaction = null;
+                _transactionStrategy.Dispose(IocResolver);
             }
+            else
+            {
+                foreach (var activeDbContext in GetAllActiveDbContexts())
+                {
+                    Release(activeDbContext);
+                }
+            }
+
+            ActiveDbContexts.Clear();
         }
 
         protected virtual void SaveChangesInDbContext(DbContext dbContext)
@@ -159,28 +215,15 @@ namespace Abp.EntityFramework.Uow
             dbContext.SaveChanges();
         }
 
-        protected virtual async Task SaveChangesInDbContextAsync(DbContext dbContext)
+        protected virtual Task SaveChangesInDbContextAsync(DbContext dbContext)
         {
-            await dbContext.SaveChangesAsync();
+            return dbContext.SaveChangesAsync();
         }
 
         protected virtual void Release(DbContext dbContext)
         {
             dbContext.Dispose();
             IocResolver.Release(dbContext);
-        }
-
-        private static void ObjectContext_ObjectMaterialized(DbContext dbContext, ObjectMaterializedEventArgs e)
-        {
-            var entityType = ObjectContext.GetObjectType(e.Entity.GetType());
-
-            dbContext.Configuration.AutoDetectChangesEnabled = false;
-            var previousState = dbContext.Entry(e.Entity).State;
-
-            DateTimePropertyInfoHelper.NormalizeDatePropertyKinds(e.Entity, entityType);
-
-            dbContext.Entry(e.Entity).State = previousState;
-            dbContext.Configuration.AutoDetectChangesEnabled = true;
         }
     }
 }

@@ -1,12 +1,17 @@
 ﻿using System;
+using System.Collections.Generic;
 using Abp.Application.Features;
 using Abp.Auditing;
 using Abp.BackgroundJobs;
 using Abp.Dependency;
 using Abp.Domain.Uow;
+using Abp.DynamicEntityProperties;
+using Abp.EntityHistory;
 using Abp.Events.Bus;
 using Abp.Notifications;
+using Abp.Resources.Embedded;
 using Abp.Runtime.Caching.Configuration;
+using Abp.Webhooks;
 
 namespace Abp.Configuration.Startup
 {
@@ -98,8 +103,28 @@ namespace Abp.Configuration.Startup
         INotificationConfiguration Notifications { get; }
 
         /// <summary>
+        /// Used to configure embedded resources.
+        /// </summary>
+        IEmbeddedResourcesConfiguration EmbeddedResources { get; }
+
+        /// <summary>
+        /// Used to configure entity history.
+        /// </summary>
+        IEntityHistoryConfiguration EntityHistory { get; }
+
+        /// <summary>
+        /// Used to configure webhook system.
+        /// </summary>
+        IWebhooksConfiguration Webhooks { get; }
+
+        /// <summary>
+        /// Used to configure dynamic entity properties
+        /// </summary>
+        IDynamicEntityPropertyConfiguration DynamicEntityProperties { get; }
+
+        /// <summary>
         /// Used to replace a service type.
-        /// Given <see cref="replaceAction"/> should register an implementation for the <see cref="type"/>.
+        /// Given <paramref name="replaceAction"/> should register an implementation for the <paramref name="type"/>.
         /// </summary>
         /// <param name="type">The type to be replaced.</param>
         /// <param name="replaceAction">Replace action.</param>
@@ -109,5 +134,9 @@ namespace Abp.Configuration.Startup
         /// Gets a configuration object.
         /// </summary>
         T Get<T>();
+
+        IList<ICustomConfigProvider> CustomConfigProviders { get; }
+
+        Dictionary<string, object> GetCustomConfig();
     }
 }

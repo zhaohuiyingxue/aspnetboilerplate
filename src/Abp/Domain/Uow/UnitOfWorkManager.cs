@@ -1,4 +1,7 @@
-﻿using System.Transactions;
+﻿using System;
+using System.Linq;
+using System.Threading.Tasks;
+using System.Transactions;
 using Abp.Dependency;
 
 namespace Abp.Domain.Uow
@@ -41,9 +44,13 @@ namespace Abp.Domain.Uow
         {
             options.FillDefaultsForNonProvidedOptions(_defaultOptions);
 
-            if (options.Scope == TransactionScopeOption.Required && _currentUnitOfWorkProvider.Current != null)
+            var outerUow = _currentUnitOfWorkProvider.Current;
+
+            if (options.Scope == TransactionScopeOption.Required && outerUow != null)
             {
-                return new InnerUnitOfWorkCompleteHandle();
+                return outerUow.Options?.Scope == TransactionScopeOption.Suppress
+                    ? new InnerSuppressUnitOfWorkCompleteHandle(outerUow)
+                    : new InnerUnitOfWorkCompleteHandle();
             }
 
             var uow = _iocResolver.Resolve<IUnitOfWork>();
@@ -63,7 +70,19 @@ namespace Abp.Domain.Uow
                 _iocResolver.Release(uow);
             };
 
+            //Inherit filters from outer UOW
+            if (outerUow != null)
+            {
+                options.FillOuterUowFiltersForNonProvidedOptions(outerUow.Filters.ToList());
+            }
+
             uow.Begin(options);
+
+            //Inherit tenant from outer UOW
+            if (outerUow != null)
+            {
+                uow.SetTenantId(outerUow.GetTenantId(), false);
+            }
 
             _currentUnitOfWorkProvider.Current = uow;
 

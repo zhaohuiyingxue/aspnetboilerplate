@@ -75,8 +75,9 @@ namespace Abp.TestBase.SampleApplication.Tests.People
         public async Task Should_Set_Deletion_Audit_Informations()
         {
             const long userId = 42;
-
             AbpSession.UserId = userId;
+
+            var uowManager = Resolve<IUnitOfWorkManager>();
 
             //Get an entity to delete
             var personToBeDeleted = (await _personRepository.GetAllListAsync()).FirstOrDefault();
@@ -86,7 +87,7 @@ namespace Abp.TestBase.SampleApplication.Tests.People
             personToBeDeleted.IsDeleted.ShouldBe(false);
             personToBeDeleted.DeletionTime.ShouldBe(null);
             personToBeDeleted.DeleterUserId.ShouldBe(null);
-            
+
             //Delete it
             await _personRepository.DeleteAsync(personToBeDeleted.Id);
 
@@ -94,7 +95,6 @@ namespace Abp.TestBase.SampleApplication.Tests.People
             (await _personRepository.FirstOrDefaultAsync(personToBeDeleted.Id)).ShouldBe(null);
 
             //Get deleted entity again and check audit informations
-            var uowManager = Resolve<IUnitOfWorkManager>();
             using (var ouw = uowManager.Begin())
             {
                 using (uowManager.Current.DisableFilter(AbpDataFilters.SoftDelete))
@@ -108,7 +108,37 @@ namespace Abp.TestBase.SampleApplication.Tests.People
                     personToBeDeleted.DeleterUserId.ShouldBe(userId);
                 }
 
-                ouw.Complete();
+                await ouw.CompleteAsync();
+            }
+        }
+
+        [Fact]
+        public async Task Should_Permanently_Delete_SoftDelete_Entity_With_HarDelete_Method()
+        {
+            var uowManager = Resolve<IUnitOfWorkManager>();
+
+            using (var uow = uowManager.Begin())
+            {
+                var people = await _personRepository.GetAllListAsync();
+
+                foreach (var person in people)
+                {
+                    await _personRepository.HardDeleteAsync(person);
+                }
+
+                await uow.CompleteAsync();
+            }
+
+            using (var uow = uowManager.Begin())
+            {
+                using (uowManager.Current.DisableFilter(AbpDataFilters.SoftDelete))
+                {
+                    var people = await _personRepository.GetAllListAsync();
+                    people.Count.ShouldBe(1);
+                    people.First().Name.ShouldBe("emre");
+                }
+
+                await uow.CompleteAsync();
             }
         }
     }

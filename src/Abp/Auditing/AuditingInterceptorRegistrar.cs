@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Linq;
+using System.Reflection;
 using Abp.Dependency;
 using Castle.Core;
 
@@ -9,24 +10,18 @@ namespace Abp.Auditing
     {
         public static void Initialize(IIocManager iocManager)
         {
-            var auditingConfiguration = iocManager.Resolve<IAuditingConfiguration>();
             iocManager.IocContainer.Kernel.ComponentRegistered += (key, handler) =>
             {
-                if (ShouldIntercept(auditingConfiguration, handler.ComponentModel.Implementation))
+                if (ShouldIntercept(iocManager, handler.ComponentModel.Implementation))
                 {
-                    handler.ComponentModel.Interceptors.Add(new InterceptorReference(typeof(AuditingInterceptor)));
+                    handler.ComponentModel.Interceptors.Add(new InterceptorReference(typeof(AbpAsyncDeterminationInterceptor<AuditingInterceptor>)));
                 }
             };
         }
         
-        private static bool ShouldIntercept(IAuditingConfiguration auditingConfiguration, Type type)
+        private static bool ShouldIntercept(IIocManager iocManager, Type type)
         {
-            if (auditingConfiguration.Selectors.Any(selector => selector.Predicate(type)))
-            {
-                return true;
-            }
-
-            if (type.IsDefined(typeof(AuditedAttribute), true))
+            if (type.GetTypeInfo().IsDefined(typeof(AuditedAttribute), true))
             {
                 return true;
             }
@@ -36,6 +31,18 @@ namespace Abp.Auditing
                 return true;
             }
 
+            if (!iocManager.IsRegistered<IAbpAuditingDefaultOptions>())
+            {
+                return false;
+            }
+            
+            var auditingOptions = iocManager.Resolve<IAbpAuditingDefaultOptions>();
+            
+            if (auditingOptions.ConventionalAuditingSelectors.Any(selector => selector(type)))
+            {
+                return true;
+            }
+            
             return false;
         }
     }

@@ -38,6 +38,24 @@ namespace Abp.Domain.Uow
             /// "tenantId".
             /// </summary>
             public const string TenantId = "tenantId";
+
+            /// <summary>
+            /// "isDeleted".
+            /// </summary>
+            public const string IsDeleted = "isDeleted";
         }
+    }
+    
+    /// <summary>
+    /// Standard filters of ABP.
+    /// </summary>
+    public static class AbpAuditFields
+    {
+        public const string CreationUserId = "CreationUserId";
+        
+        public const string LastModifierUserId = "LastModifierUserId";
+        
+        public const string DeleterUserId = "DeleterUserId";
+        
     }
 }

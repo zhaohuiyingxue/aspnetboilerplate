@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -14,5 +15,7 @@ namespace Abp.Linq
         Task<List<T>> ToListAsync<T>(IQueryable<T> queryable);
 
         Task<T> FirstOrDefaultAsync<T>(IQueryable<T> queryable);
+
+        Task<bool> AnyAsync<T>(IQueryable<T> queryable);
     }
 }

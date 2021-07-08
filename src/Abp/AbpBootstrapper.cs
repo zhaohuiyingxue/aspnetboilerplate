@@ -1,9 +1,15 @@
 ﻿using System;
+using System.Reflection;
+using Abp.Auditing;
+using Abp.Authorization;
 using Abp.Configuration.Startup;
 using Abp.Dependency;
 using Abp.Dependency.Installers;
+using Abp.Domain.Uow;
+using Abp.EntityHistory;
 using Abp.Modules;
 using Abp.PlugIns;
+using Abp.Runtime.Validation.Interception;
 using Castle.Core.Logging;
 using Castle.MicroKernel.Registration;
 using JetBrains.Annotations;
@@ -44,72 +50,82 @@ namespace Abp
         /// Creates a new <see cref="AbpBootstrapper"/> instance.
         /// </summary>
         /// <param name="startupModule">Startup module of the application which depends on other used modules. Should be derived from <see cref="AbpModule"/>.</param>
-        private AbpBootstrapper([NotNull] Type startupModule)
-            : this(startupModule, Dependency.IocManager.Instance)
-        {
-
-        }
-
-        /// <summary>
-        /// Creates a new <see cref="AbpBootstrapper"/> instance.
-        /// </summary>
-        /// <param name="startupModule">Startup module of the application which depends on other used modules. Should be derived from <see cref="AbpModule"/>.</param>
-        /// <param name="iocManager">IIocManager that is used to bootstrap the ABP system</param>
-        private AbpBootstrapper([NotNull] Type startupModule, [NotNull] IIocManager iocManager)
+        /// <param name="optionsAction">An action to set options</param>
+        private AbpBootstrapper(
+            [NotNull] Type startupModule, 
+            [CanBeNull] Action<AbpBootstrapperOptions> optionsAction = null)
         {
             Check.NotNull(startupModule, nameof(startupModule));
-            Check.NotNull(iocManager, nameof(iocManager));
 
-            if (!typeof(AbpModule).IsAssignableFrom(startupModule))
+            var options = new AbpBootstrapperOptions();
+            optionsAction?.Invoke(options);
+
+            if (!typeof(AbpModule).GetTypeInfo().IsAssignableFrom(startupModule))
             {
                 throw new ArgumentException($"{nameof(startupModule)} should be derived from {nameof(AbpModule)}.");
             }
 
             StartupModule = startupModule;
-            IocManager = iocManager;
 
-            PlugInSources = new PlugInSourceList();
+            IocManager = options.IocManager;
+            PlugInSources = options.PlugInSources;
+
             _logger = NullLogger.Instance;
+            
+            AddInterceptorRegistrars(options.InterceptorOptions);
         }
 
         /// <summary>
         /// Creates a new <see cref="AbpBootstrapper"/> instance.
         /// </summary>
         /// <typeparam name="TStartupModule">Startup module of the application which depends on other used modules. Should be derived from <see cref="AbpModule"/>.</typeparam>
-        public static AbpBootstrapper Create<TStartupModule>()
+        /// <param name="optionsAction">An action to set options</param>
+        public static AbpBootstrapper Create<TStartupModule>(
+            [CanBeNull] Action<AbpBootstrapperOptions> optionsAction = null)
             where TStartupModule : AbpModule
         {
-            return new AbpBootstrapper(typeof(TStartupModule));
-        }
-
-        /// <summary>
-        /// Creates a new <see cref="AbpBootstrapper"/> instance.
-        /// </summary>
-        /// <typeparam name="TStartupModule">Startup module of the application which depends on other used modules. Should be derived from <see cref="AbpModule"/>.</typeparam>
-        /// <param name="iocManager">IIocManager that is used to bootstrap the ABP system</param>
-        public static AbpBootstrapper Create<TStartupModule>([NotNull] IIocManager iocManager)
-            where TStartupModule : AbpModule
-        {
-            return new AbpBootstrapper(typeof(TStartupModule), iocManager);
+            return new AbpBootstrapper(typeof(TStartupModule), optionsAction);
         }
 
         /// <summary>
         /// Creates a new <see cref="AbpBootstrapper"/> instance.
         /// </summary>
         /// <param name="startupModule">Startup module of the application which depends on other used modules. Should be derived from <see cref="AbpModule"/>.</param>
-        public static AbpBootstrapper Create([NotNull] Type startupModule)
+        /// <param name="optionsAction">An action to set options</param>
+        public static AbpBootstrapper Create(
+            [NotNull] Type startupModule, 
+            [CanBeNull] Action<AbpBootstrapperOptions> optionsAction = null)
         {
-            return new AbpBootstrapper(startupModule);
+            return new AbpBootstrapper(startupModule, optionsAction);
         }
 
-        /// <summary>
-        /// Creates a new <see cref="AbpBootstrapper"/> instance.
-        /// </summary>
-        /// <param name="startupModule">Startup module of the application which depends on other used modules. Should be derived from <see cref="AbpModule"/>.</param>
-        /// <param name="iocManager">IIocManager that is used to bootstrap the ABP system</param>
-        public static AbpBootstrapper Create([NotNull] Type startupModule, [NotNull] IIocManager iocManager)
+        private void AddInterceptorRegistrars(
+            AbpBootstrapperInterceptorOptions options)
         {
-            return new AbpBootstrapper(startupModule, iocManager);
+            if (!options.DisableValidationInterceptor)
+            {
+                ValidationInterceptorRegistrar.Initialize(IocManager);    
+            }
+
+            if (!options.DisableAuditingInterceptor)
+            {
+                AuditingInterceptorRegistrar.Initialize(IocManager);
+            }
+
+            if (!options.DisableEntityHistoryInterceptor)
+            {
+                EntityHistoryInterceptorRegistrar.Initialize(IocManager);    
+            }
+
+            if (!options.DisableUnitOfWorkInterceptor)
+            {
+                UnitOfWorkRegistrar.Initialize(IocManager);
+            }
+
+            if (!options.DisableAuthorizationInterceptor)
+            {
+                AuthorizationInterceptorRegistrar.Initialize(IocManager);   
+            }
         }
 
         /// <summary>
@@ -152,7 +168,7 @@ namespace Abp
             {
                 IocManager.IocContainer.Register(
                     Component.For<AbpBootstrapper>().Instance(this)
-                    );
+                );
             }
         }
 

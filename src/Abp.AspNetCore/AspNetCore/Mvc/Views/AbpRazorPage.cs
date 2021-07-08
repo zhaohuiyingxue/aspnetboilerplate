@@ -2,6 +2,7 @@
 using Abp.Application.Features;
 using Abp.Authorization;
 using Abp.Configuration;
+using Abp.Extensions;
 using Abp.Localization;
 using Abp.Localization.Sources;
 using Microsoft.AspNetCore.Mvc.Razor;
@@ -22,17 +23,15 @@ namespace Abp.AspNetCore.Mvc.Views
         {
             get
             {
-                //TODO: Implement this
-                return "/";
-                //var appPath = HttpContext.Current.Request.ApplicationPath;
-                //if (appPath == null)
-                //{
-                //    return "/";
-                //}
+                var appPath = Context.Request.PathBase.Value;
+                if (appPath == null)
+                {
+                    return "/";
+                }
 
-                //appPath = appPath.EnsureEndsWith('/');
+                appPath = appPath.EnsureEndsWith('/');
 
-                //return appPath;
+                return appPath;
             }
         }
 
@@ -118,7 +117,7 @@ namespace Abp.AspNetCore.Mvc.Views
         /// <param name="culture">culture information</param>
         /// <param name="args">Format arguments</param>
         /// <returns>Localized string</returns>
-        protected string L(string name, CultureInfo culture, params object[] args)
+        protected virtual string L(string name, CultureInfo culture, params object[] args)
         {
             return _localizationSource.GetString(name, culture, args);
         }

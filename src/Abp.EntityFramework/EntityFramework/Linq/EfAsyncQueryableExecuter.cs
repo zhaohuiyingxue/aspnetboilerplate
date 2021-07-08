@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Data.Entity;
 using System.Linq;
 using System.Threading.Tasks;
@@ -22,6 +23,11 @@ namespace Abp.EntityFramework.Linq
         public Task<T> FirstOrDefaultAsync<T>(IQueryable<T> queryable)
         {
             return queryable.FirstOrDefaultAsync();
+        }
+
+        public Task<bool> AnyAsync<T>(IQueryable<T> queryable)
+        {
+            return queryable.AnyAsync();
         }
     }
 }

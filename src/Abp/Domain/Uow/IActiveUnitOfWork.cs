@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Abp.Domain.Entities;
 
 namespace Abp.Domain.Uow
 {
@@ -25,7 +26,7 @@ namespace Abp.Domain.Uow
         /// This event is raised when this UOW is disposed.
         /// </summary>
         event EventHandler Disposed;
-        
+
         /// <summary>
         /// Gets if this unit of work is transactional.
         /// </summary>
@@ -35,6 +36,16 @@ namespace Abp.Domain.Uow
         /// Gets data filter configurations for this unit of work.
         /// </summary>
         IReadOnlyList<DataFilterConfiguration> Filters { get; }
+
+        /// <summary>
+        /// Gets audit field configurations for this unit of work.
+        /// </summary>
+        IReadOnlyList<AuditFieldConfiguration> AuditFieldConfiguration { get; }
+        
+        /// <summary>
+        /// A dictionary to use for custom operations on unitOfWork
+        /// </summary>
+        Dictionary<string, object> Items { get; set; }
 
         /// <summary>
         /// Is this UOW disposed?
@@ -92,10 +103,38 @@ namespace Abp.Domain.Uow
         IDisposable SetFilterParameter(string filterName, string parameterName, object value);
 
         /// <summary>
+        /// Disables automatic saving for one or more audit fields.
+        /// </summary>
+        /// <param name="fieldNames">One or more audit field names. <see cref="AbpAuditFields"/> for standard fields.</param>
+        /// <returns>A <see cref="IDisposable"/> handle to take back the disable effect.</returns>
+        IDisposable DisableAuditing(params string[] fieldNames);
+        
+        /// <summary>
+        /// Enables automatic saving for one or more audit fields.
+        /// </summary>
+        /// <param name="fieldNames">One or more audit field names. <see cref="AbpAuditFields"/> for standard fields.</param>
+        /// <returns>A <see cref="IDisposable"/> handle to take back the enable effect.</returns>
+        IDisposable EnableAuditing(params string[] fieldNames);
+        
+        /// <summary>
         /// Sets/Changes Tenant's Id for this UOW.
         /// </summary>
         /// <param name="tenantId">The tenant id.</param>
+        /// <returns>A disposable object to restore old TenantId value when you dispose it</returns>
         IDisposable SetTenantId(int? tenantId);
+
+        /// <summary>
+        /// Sets/Changes Tenant's Id for this UOW.
+        /// </summary>
+        /// <param name="tenantId">The tenant id</param>
+        /// <param name="switchMustHaveTenantEnableDisable">
+        /// True to enable/disable <see cref="IMustHaveTenant"/> based on given tenantId.
+        /// Enables <see cref="IMustHaveTenant"/> filter if tenantId is not null.
+        /// Disables <see cref="IMustHaveTenant"/> filter if tenantId is null.
+        /// This value is true for <see cref="SetTenantId(int?)"/> method.
+        /// </param>
+        /// <returns>A disposable object to restore old TenantId value when you dispose it</returns>
+        IDisposable SetTenantId(int? tenantId, bool switchMustHaveTenantEnableDisable);
 
         /// <summary>
         /// Gets Tenant Id for this UOW.

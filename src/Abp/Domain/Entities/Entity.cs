@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Reflection;
 using Abp.Extensions;
 
 namespace Abp.Domain.Entities
@@ -52,7 +53,7 @@ namespace Abp.Domain.Entities
         }
 
         /// <inheritdoc/>
-        public override bool Equals(object obj)
+        public virtual bool EntityEquals(object obj)
         {
             if (obj == null || !(obj is Entity<TPrimaryKey>))
             {
@@ -75,7 +76,7 @@ namespace Abp.Domain.Entities
             //Must have a IS-A relation of types or must be same type
             var typeOfThis = GetType();
             var typeOfOther = other.GetType();
-            if (!typeOfThis.IsAssignableFrom(typeOfOther) && !typeOfOther.IsAssignableFrom(typeOfThis))
+            if (!typeOfThis.GetTypeInfo().IsAssignableFrom(typeOfOther) && !typeOfOther.GetTypeInfo().IsAssignableFrom(typeOfThis))
             {
                 return false;
             }
@@ -94,31 +95,7 @@ namespace Abp.Domain.Entities
 
             return Id.Equals(other.Id);
         }
-
-        /// <inheritdoc/>
-        public override int GetHashCode()
-        {
-            return Id.GetHashCode();
-        }
-
-        /// <inheritdoc/>
-        public static bool operator ==(Entity<TPrimaryKey> left, Entity<TPrimaryKey> right)
-        {
-            if (Equals(left, null))
-            {
-                return Equals(right, null);
-            }
-
-            return left.Equals(right);
-        }
-
-        /// <inheritdoc/>
-        public static bool operator !=(Entity<TPrimaryKey> left, Entity<TPrimaryKey> right)
-        {
-            return !(left == right);
-        }
-
-        /// <inheritdoc/>
+     
         public override string ToString()
         {
             return $"[{GetType().Name} {Id}]";

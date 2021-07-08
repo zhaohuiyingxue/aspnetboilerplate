@@ -1,17 +1,15 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.IO;
+using System.Text.RegularExpressions;
 using System.Web;
 using System.Web.Mvc;
+using Abp.Dependency;
 using Abp.Logging;
-using Abp.Web.Mvc.Resources;
-using System.Text.RegularExpressions;
+using Abp.Resources.Embedded;
 
 namespace Abp.Web.Mvc.Extensions
 {
-    /// <summary>
-    /// TODO: What if resource changes? How to update cache?
-    /// </summary>
     public static class HtmlHelperResourceExtensions
     {
         private static readonly ConcurrentDictionary<string, string> Cache;
@@ -67,7 +65,6 @@ namespace Abp.Web.Mvc.Extensions
                     }
                     else
                     {
-                        //TODO: Refactor...
                         var fullPath = HttpContext.Current.Server.MapPath(path.Replace("/", "\\"));
                         result = File.Exists(fullPath)
                             ? GetPathWithVersioningForPhysicalFile(path, fullPath)
@@ -103,10 +100,10 @@ namespace Abp.Web.Mvc.Extensions
 
             if (embeddedResourcePath.StartsWith("/"))
             {
-                embeddedResourcePath = embeddedResourcePath.Substring(1);                
+                embeddedResourcePath = embeddedResourcePath.Substring(1);
             }
 
-            var resource = WebResourceHelper.GetEmbeddedResource(embeddedResourcePath);
+            var resource = SingletonDependency<IEmbeddedResourceManager>.Instance.GetResource(embeddedResourcePath);
             var fileVersion = new FileInfo(resource.Assembly.Location).LastWriteTime.Ticks;
             return VirtualPathUtility.ToAbsolute(path) + "?v=" + fileVersion;
         }

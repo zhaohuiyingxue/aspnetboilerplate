@@ -1,7 +1,8 @@
-﻿using System;
-using Abp.Dependency;
+﻿using Abp.Dependency;
 using Abp.Json;
+using Newtonsoft.Json;
 using StackExchange.Redis;
+using System;
 
 namespace Abp.Runtime.Caching.Redis
 {
@@ -15,10 +16,17 @@ namespace Abp.Runtime.Caching.Redis
         /// </summary>
         /// <param name="objbyte">String representation of the object from the Redis server.</param>
         /// <returns>Returns a newly constructed object.</returns>
-        /// <seealso cref="IRedisCacheSerializer.Serialize" />
-        public object Deserialize(RedisValue objbyte)
+        /// <seealso cref="IRedisCacheSerializer{TSource, TDestination}.Serialize" />
+        public virtual object Deserialize(RedisValue objbyte)
         {
-            return JsonSerializationHelper.DeserializeWithType(objbyte);
+            var serializerSettings = new JsonSerializerSettings();
+            serializerSettings.Converters.Insert(0, new AbpDateTimeConverter());
+
+            AbpCacheData cacheData = AbpCacheData.Deserialize(objbyte);
+
+            return cacheData.Payload.FromJsonString(
+                Type.GetType(cacheData.Type, true, true),
+                serializerSettings);
         }
 
         /// <summary>
@@ -27,10 +35,10 @@ namespace Abp.Runtime.Caching.Redis
         /// <param name="value">Instance to serialize.</param>
         /// <param name="type">Type of the object.</param>
         /// <returns>Returns a string representing the object instance that can be placed into the Redis cache.</returns>
-        /// <seealso cref="IRedisCacheSerializer.Deserialize" />
-        public string Serialize(object value, Type type)
+        /// <seealso cref="IRedisCacheSerializer{TSource, TDestination}.Deserialize" />
+        public virtual RedisValue Serialize(object value, Type type)
         {
-            return JsonSerializationHelper.SerializeWithType(value, type);
+            return JsonConvert.SerializeObject(AbpCacheData.Serialize(value));
         }
     }
 }
