@@ -21,6 +21,12 @@ namespace Abp.Domain.Uow
         bool IsTransactional { get; set; }
 
         /// <summary>
+        /// A boolean value indicates that System.Transactions.TransactionScope is available for current application.
+        /// Default: true.
+        /// </summary>
+        bool IsTransactionScopeAvailable { get; set; }
+
+        /// <summary>
         /// Gets/sets a timeout value for unit of works.
         /// </summary>
         TimeSpan? Timeout { get; set; }
@@ -35,6 +41,16 @@ namespace Abp.Domain.Uow
         /// Gets list of all data filter configurations.
         /// </summary>
         IReadOnlyList<DataFilterConfiguration> Filters { get; }
+        
+        /// <summary>
+        /// Gets list of all data filter configurations.
+        /// </summary>
+        IReadOnlyList<AuditFieldConfiguration> AuditFieldConfiguration { get; }
+
+        /// <summary>
+        /// A list of selectors to determine conventional Unit Of Work classes.
+        /// </summary>
+        List<Func<Type, bool>> ConventionalUowSelectors { get; }
 
         /// <summary>
         /// Registers a data filter to unit of work system.
@@ -42,6 +58,13 @@ namespace Abp.Domain.Uow
         /// <param name="filterName">Name of the filter.</param>
         /// <param name="isEnabledByDefault">Is filter enabled by default.</param>
         void RegisterFilter(string filterName, bool isEnabledByDefault);
+        
+        /// <summary>
+        /// Registers an audit field configuration to unit of work system.
+        /// </summary>
+        /// <param name="fieldName">Name of the audit field.</param>
+        /// <param name="isSavingEnabledByDefault">Is saving field enabled by default.</param>
+        void RegisterAuditFieldConfiguration(string fieldName, bool isSavingEnabledByDefault);
 
         /// <summary>
         /// Overrides a data filter definition.

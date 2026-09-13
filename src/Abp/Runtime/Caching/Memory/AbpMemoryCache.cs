@@ -1,5 +1,7 @@
 ﻿using System;
-using System.Runtime.Caching;
+using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Caching.Memory;
+using Abp.Data;
 
 namespace Abp.Runtime.Caching.Memory
 {
@@ -9,49 +11,64 @@ namespace Abp.Runtime.Caching.Memory
     public class AbpMemoryCache : CacheBase
     {
         private MemoryCache _memoryCache;
+        private readonly MemoryCacheOptions _memoryCacheOptions;
 
         /// <summary>
         /// Constructor.
         /// </summary>
         /// <param name="name">Unique name of the cache</param>
-        public AbpMemoryCache(string name)
+        /// <param name="memoryCacheOptions">MemoryCacheOptions</param>
+        public AbpMemoryCache(string name, MemoryCacheOptions memoryCacheOptions = null)
             : base(name)
         {
-            _memoryCache = new MemoryCache(Name);
+            _memoryCacheOptions = memoryCacheOptions;
+            _memoryCache = new MemoryCache(new OptionsWrapper<MemoryCacheOptions>(
+                memoryCacheOptions ?? new MemoryCacheOptions()
+            ));
         }
 
-        public override object GetOrDefault(string key)
+        public override bool TryGetValue(string key, out object value)
         {
-            return _memoryCache.Get(key);
+            return _memoryCache.TryGetValue(key, out value);
         }
 
-        public override void Set(string key, object value, TimeSpan? slidingExpireTime = null, TimeSpan? absoluteExpireTime = null)
+        public override void Set(string key, object value, TimeSpan? slidingExpireTime = null, DateTimeOffset? absoluteExpireTime = null)
         {
             if (value == null)
             {
                 throw new AbpException("Can not insert null values to the cache!");
             }
+            var cacheOptions = new MemoryCacheEntryOptions { Size = 1 };
 
-            var cachePolicy = new CacheItemPolicy();
+            if (absoluteExpireTime.HasValue || slidingExpireTime.HasValue)
+            {
+                if (absoluteExpireTime.HasValue)
+                {
+                    cacheOptions.AbsoluteExpiration = absoluteExpireTime;
+                }
 
-            if (absoluteExpireTime != null)
-            {
-                cachePolicy.AbsoluteExpiration = DateTimeOffset.Now.Add(absoluteExpireTime.Value);
+                if (slidingExpireTime.HasValue)
+                {
+                    cacheOptions.SlidingExpiration = slidingExpireTime;
+                }
+
+                _memoryCache.Set(key, value, cacheOptions);
             }
-            else if (slidingExpireTime != null)
+            else if (DefaultAbsoluteExpireTimeFactory != null)
             {
-                cachePolicy.SlidingExpiration = slidingExpireTime.Value;
+                cacheOptions.AbsoluteExpiration = DefaultAbsoluteExpireTimeFactory(key);
+                _memoryCache.Set(key, value, cacheOptions);
             }
-            else if(DefaultAbsoluteExpireTime != null)
+            else if (DefaultAbsoluteExpireTime.HasValue)
             {
-                cachePolicy.AbsoluteExpiration = DateTimeOffset.Now.Add(DefaultAbsoluteExpireTime.Value);
+                cacheOptions.AbsoluteExpiration = DefaultAbsoluteExpireTime.Value;
+                _memoryCache.Set(key, value, cacheOptions);
             }
             else
             {
-                cachePolicy.SlidingExpiration = DefaultSlidingExpireTime;
+                cacheOptions.SlidingExpiration = DefaultSlidingExpireTime;
+                _memoryCache.Set(key, value, cacheOptions);
             }
-
-            _memoryCache.Set(key, value, cachePolicy);
         }
 
         public override void Remove(string key)
@@ -62,7 +79,9 @@ namespace Abp.Runtime.Caching.Memory
         public override void Clear()
         {
             _memoryCache.Dispose();
-            _memoryCache = new MemoryCache(Name);
+            _memoryCache = new MemoryCache(new OptionsWrapper<MemoryCacheOptions>(
+                _memoryCacheOptions ?? new MemoryCacheOptions()
+            ));
         }
 
         public override void Dispose()

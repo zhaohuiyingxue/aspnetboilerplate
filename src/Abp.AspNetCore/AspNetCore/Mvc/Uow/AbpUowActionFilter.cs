@@ -1,44 +1,52 @@
-﻿using System.Threading.Tasks;
+using System.Threading.Tasks;
 using Abp.AspNetCore.Configuration;
 using Abp.AspNetCore.Mvc.Extensions;
 using Abp.Dependency;
 using Abp.Domain.Uow;
 using Microsoft.AspNetCore.Mvc.Filters;
 
-namespace Abp.AspNetCore.Mvc.Uow
-{
-    public class AbpUowActionFilter : IAsyncActionFilter, ITransientDependency
-    {
-        private readonly IUnitOfWorkManager _unitOfWorkManager;
-        private readonly IAbpAspNetCoreConfiguration _configuration;
+namespace Abp.AspNetCore.Mvc.Uow;
 
-        public AbpUowActionFilter(
-            IUnitOfWorkManager unitOfWorkManager,
-            IAbpAspNetCoreConfiguration configuration)
+public class AbpUowActionFilter : IAsyncActionFilter, ITransientDependency
+{
+    private readonly IUnitOfWorkManager _unitOfWorkManager;
+    private readonly IAbpAspNetCoreConfiguration _aspnetCoreConfiguration;
+    private readonly IUnitOfWorkDefaultOptions _unitOfWorkDefaultOptions;
+
+    public AbpUowActionFilter(
+        IUnitOfWorkManager unitOfWorkManager,
+        IAbpAspNetCoreConfiguration aspnetCoreConfiguration,
+        IUnitOfWorkDefaultOptions unitOfWorkDefaultOptions)
+    {
+        _unitOfWorkManager = unitOfWorkManager;
+        _aspnetCoreConfiguration = aspnetCoreConfiguration;
+        _unitOfWorkDefaultOptions = unitOfWorkDefaultOptions;
+    }
+
+    public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
+    {
+        if (!context.ActionDescriptor.IsControllerAction())
         {
-            _unitOfWorkManager = unitOfWorkManager;
-            _configuration = configuration;
+            await next();
+            return;
         }
 
-        public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
+        var unitOfWorkAttr = _unitOfWorkDefaultOptions
+            .GetUnitOfWorkAttributeOrNull(context.ActionDescriptor.GetMethodInfo()) ??
+            _aspnetCoreConfiguration.DefaultUnitOfWorkAttribute;
+
+        if (unitOfWorkAttr.IsDisabled)
         {
-            var unitOfWorkAttr = UnitOfWorkAttribute
-                .GetUnitOfWorkAttributeOrNull(context.ActionDescriptor.GetMethodInfo()) ??
-                _configuration.DefaultUnitOfWorkAttribute;
+            await next();
+            return;
+        }
 
-            if (unitOfWorkAttr.IsDisabled)
+        using (var uow = _unitOfWorkManager.Begin(unitOfWorkAttr.CreateOptions()))
+        {
+            var result = await next();
+            if (result.Exception == null || result.ExceptionHandled)
             {
-                await next();
-                return;
-            }
-
-            using (var uow = _unitOfWorkManager.Begin(unitOfWorkAttr.CreateOptions()))
-            {
-                var result = await next();
-                if (result.Exception == null || result.ExceptionHandled)
-                {
-                    await uow.CompleteAsync();
-                }
+                await uow.CompleteAsync();
             }
         }
     }

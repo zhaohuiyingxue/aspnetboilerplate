@@ -1,8 +1,11 @@
-﻿using System;
+﻿using Abp.Domain.Entities.Auditing;
+using Abp.Extensions;
+using Abp.MultiTenancy;
+using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
-using Abp.Domain.Entities.Auditing;
-using Abp.MultiTenancy;
+using System.Linq;
 
 namespace Abp.Notifications
 {
@@ -69,43 +72,50 @@ namespace Abp.Notifications
         /// </summary>
         public const int MaxTenantIdsLength = 128 * 1024;
 
+        public const int MaxTargetNotifiersLength = 1024;
+        
+        /// <summary>
+        /// Notification target list separation character.
+        /// </summary>
+        public const char NotificationTargetSeparator = ',';
+
         /// <summary>
         /// Unique notification name.
         /// </summary>
         [Required]
-        [MaxLength(MaxNotificationNameLength)]
+        [StringLength(MaxNotificationNameLength)]
         public virtual string NotificationName { get; set; }
 
         /// <summary>
         /// Notification data as JSON string.
         /// </summary>
-        [MaxLength(MaxDataLength)]
+        [StringLength(MaxDataLength)]
         public virtual string Data { get; set; }
 
         /// <summary>
         /// Type of the JSON serialized <see cref="Data"/>.
         /// It's AssemblyQualifiedName of the type.
         /// </summary>
-        [MaxLength(MaxDataTypeNameLength)]
+        [StringLength(MaxDataTypeNameLength)]
         public virtual string DataTypeName { get; set; }
 
         /// <summary>
         /// Gets/sets entity type name, if this is an entity level notification.
         /// It's FullName of the entity type.
         /// </summary>
-        [MaxLength(MaxEntityTypeNameLength)]
+        [StringLength(MaxEntityTypeNameLength)]
         public virtual string EntityTypeName { get; set; }
 
         /// <summary>
         /// AssemblyQualifiedName of the entity type.
         /// </summary>
-        [MaxLength(MaxEntityTypeAssemblyQualifiedNameLength)]
+        [StringLength(MaxEntityTypeAssemblyQualifiedNameLength)]
         public virtual string EntityTypeAssemblyQualifiedName { get; set; }
 
         /// <summary>
         /// Gets/sets primary key of the entity, if this is an entity level notification.
         /// </summary>
-        [MaxLength(MaxEntityIdLength)]
+        [StringLength(MaxEntityIdLength)]
         public virtual string EntityId { get; set; }
 
         /// <summary>
@@ -118,7 +128,7 @@ namespace Abp.Notifications
         /// If this is set, it overrides subscribed users.
         /// If this is null/empty, then notification is sent to all subscribed users.
         /// </summary>
-        [MaxLength(MaxUserIdsLength)]
+        [StringLength(MaxUserIdsLength)]
         public virtual string UserIds { get; set; }
 
         /// <summary>
@@ -126,7 +136,7 @@ namespace Abp.Notifications
         /// This can be set to exclude some users while publishing notifications to subscribed users.
         /// It's not normally used if <see cref="UserIds"/> is not null.
         /// </summary>
-        [MaxLength(MaxUserIdsLength)]
+        [StringLength(MaxUserIdsLength)]
         public virtual string ExcludedUserIds { get; set; }
 
         /// <summary>
@@ -135,15 +145,37 @@ namespace Abp.Notifications
         /// This is valid only if UserIds is null.
         /// If it's "0", then indicates to all tenants.
         /// </summary>
-        [MaxLength(MaxTenantIdsLength)]
+        [StringLength(MaxTenantIdsLength)]
         public virtual string TenantIds { get; set; }
+
+        /// <summary>
+        /// which realtime notifiers should handle this notification
+        /// </summary>
+        [StringLength(MaxTargetNotifiersLength)]
+        public virtual string TargetNotifiers { get; set; }
+
+        [NotMapped]
+        public virtual List<string> TargetNotifiersList => TargetNotifiers.IsNullOrWhiteSpace()
+            ? new List<string>()
+            : TargetNotifiers.Split(NotificationTargetSeparator).ToList();
+
+        public NotificationInfo()
+        {
+
+        }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="NotificationInfo"/> class.
         /// </summary>
-        public NotificationInfo()
+        public NotificationInfo(Guid id)
         {
+            Id = id;
             Severity = NotificationSeverity.Info;
+        }
+
+        public virtual void SetTargetNotifiers(List<string> list)
+        {
+            TargetNotifiers = string.Join(NotificationTargetSeparator.ToString(), list);
         }
     }
 }

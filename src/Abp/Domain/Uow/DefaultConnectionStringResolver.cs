@@ -1,5 +1,5 @@
-using System;
 using System.Configuration;
+using System.Threading.Tasks;
 using Abp.Configuration.Startup;
 using Abp.Dependency;
 
@@ -25,10 +25,7 @@ namespace Abp.Domain.Uow
 
         public virtual string GetNameOrConnectionString(ConnectionStringResolveArgs args)
         {
-            if (args == null)
-            {
-                throw new ArgumentNullException("args");
-            }
+            Check.NotNull(args, nameof(args));
 
             var defaultConnectionString = _configuration.DefaultNameOrConnectionString;
             if (!string.IsNullOrWhiteSpace(defaultConnectionString))
@@ -47,6 +44,11 @@ namespace Abp.Domain.Uow
             }
 
             throw new AbpException("Could not find a connection string definition for the application. Set IAbpStartupConfiguration.DefaultNameOrConnectionString or add a 'Default' connection string to application .config file.");
+        }
+
+        public virtual Task<string> GetNameOrConnectionStringAsync(ConnectionStringResolveArgs args)
+        {
+            return Task.FromResult(GetNameOrConnectionString(args));
         }
     }
 }

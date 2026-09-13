@@ -1,66 +1,42 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 using Abp.AspNetCore.Mvc.Extensions;
 using Abp.Collections.Extensions;
 using Abp.Configuration.Startup;
 using Abp.Dependency;
-using Abp.Runtime.Validation.Interception;
+using Abp.Web.Validation;
 using Microsoft.AspNetCore.Mvc.Filters;
 
-namespace Abp.AspNetCore.Mvc.Validation
+namespace Abp.AspNetCore.Mvc.Validation;
+
+public class MvcActionInvocationValidator : ActionInvocationValidatorBase
 {
-    public class MvcActionInvocationValidator : MethodInvocationValidator
+    protected ActionExecutingContext ActionContext { get; private set; }
+
+    public MvcActionInvocationValidator(IValidationConfiguration configuration, IIocResolver iocResolver)
+        : base(configuration, iocResolver)
     {
-        protected ActionExecutingContext ActionContext { get; private set; }
+    }
 
-        private bool _isValidatedBefore;
+    public void Initialize(ActionExecutingContext actionContext)
+    {
+        ActionContext = actionContext;
 
-        public MvcActionInvocationValidator(IValidationConfiguration configuration, IIocResolver iocResolver)
-            : base(configuration, iocResolver)
+        base.Initialize(actionContext.ActionDescriptor.GetMethodInfo());
+    }
+
+    protected override object GetParameterValue(string parameterName)
+    {
+        return ActionContext.ActionArguments.GetOrDefault(parameterName);
+    }
+
+    protected override void SetDataAnnotationAttributeErrors()
+    {
+        foreach (var state in ActionContext.ModelState)
         {
-
-        }
-
-        public void Initialize(ActionExecutingContext actionContext)
-        {
-            base.Initialize(
-                actionContext.ActionDescriptor.GetMethodInfo(),
-                GetParameterValues(actionContext)
-            );
-
-            ActionContext = actionContext;
-        }
-
-        protected override void SetDataAnnotationAttributeErrors(object validatingObject)
-        {
-            if (_isValidatedBefore || ActionContext.ModelState.IsValid)
+            foreach (var error in state.Value.Errors)
             {
-                return;
+                ValidationErrors.Add(new ValidationResult(error.ErrorMessage, new[] { state.Key }));
             }
-
-            foreach (var state in ActionContext.ModelState)
-            {
-                foreach (var error in state.Value.Errors)
-                {
-                    ValidationErrors.Add(new ValidationResult(error.ErrorMessage, new[] { state.Key }));
-                }
-            }
-
-            _isValidatedBefore = true;
-        }
-
-        protected virtual object[] GetParameterValues(ActionExecutingContext actionContext)
-        {
-            var methodInfo = actionContext.ActionDescriptor.GetMethodInfo();
-
-            var parameters = methodInfo.GetParameters();
-            var parameterValues = new object[parameters.Length];
-
-            for (var i = 0; i < parameters.Length; i++)
-            {
-                parameterValues[i] = actionContext.ActionArguments.GetOrDefault(parameters[i].Name);
-            }
-
-            return parameterValues;
         }
     }
 }

@@ -22,7 +22,7 @@ namespace Abp.Authorization
         {
             if (ShouldIntercept(handler.ComponentModel.Implementation))
             {
-                handler.ComponentModel.Interceptors.Add(new InterceptorReference(typeof(AuthorizationInterceptor))); 
+                handler.ComponentModel.Interceptors.Add(new InterceptorReference(typeof(AbpAsyncDeterminationInterceptor<AuthorizationInterceptor>))); 
             }
         }
 
@@ -43,7 +43,7 @@ namespace Abp.Authorization
 
         private static bool SelfOrMethodsDefinesAttribute<TAttr>(Type type)
         {
-            if (type.IsDefined(typeof(TAttr), true))
+            if (type.GetTypeInfo().IsDefined(typeof(TAttr), true))
             {
                 return true;
             }

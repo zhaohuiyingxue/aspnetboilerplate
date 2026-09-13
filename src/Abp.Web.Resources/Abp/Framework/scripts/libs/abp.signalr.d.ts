@@ -4,7 +4,17 @@
 
         let autoConnect: boolean;
 
-        function connect();
+        let qs: string;
+
+        let remoteServiceBaseUrl: string;
+
+        let url: string;
+
+        let withUrlOptions: object;
+        
+        function connect(): any;
+
+        function startConnection(url: string, configureConnection: Function): Promise<any>;
 
         namespace hubs {
 

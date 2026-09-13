@@ -5,49 +5,51 @@ using Abp.Domain.Uow;
 using Abp.EntityFrameworkCore.Tests.Domain;
 using Microsoft.EntityFrameworkCore;
 using Shouldly;
+using Xunit;
 
-namespace Abp.EntityFrameworkCore.Tests.Tests
+namespace Abp.EntityFrameworkCore.Tests.Tests;
+
+public class Transaction_Tests : EntityFrameworkCoreModuleTestBase
 {
-    //WE CAN NOT TEST TRANSACTIONS SINCE INMEMORY DB DOES NOT SUPPORT IT! TODO: Use SQLite
-    public class Transaction_Tests : EntityFrameworkCoreModuleTestBase
+    private readonly IUnitOfWorkManager _uowManager;
+    private readonly IRepository<Blog> _blogRepository;
+
+    public Transaction_Tests()
     {
-        private readonly IUnitOfWorkManager _uowManager;
-        private readonly IRepository<Blog> _blogRepository;
+        _uowManager = Resolve<IUnitOfWorkManager>();
+        _blogRepository = Resolve<IRepository<Blog>>();
+    }
 
-        public Transaction_Tests()
+    [Fact]
+    public async Task Should_Rollback_Transaction_On_Failure()
+    {
+        const string exceptionMessage = "This is a test exception!";
+
+        var blogName = Guid.NewGuid().ToString("N");
+
+        try
         {
-            _uowManager = Resolve<IUnitOfWorkManager>();
-            _blogRepository = Resolve<IRepository<Blog>>();
+            using (var uow = _uowManager.Begin())
+            {
+                await _blogRepository.InsertAsync(
+                    new Blog(blogName, $"http://{blogName}.com/")
+                    );
+
+                throw new Exception(exceptionMessage); //Rollbacks transaction.
+
+                // Unreachable code.
+                // await uow.CompleteAsync();
+            }
+        }
+        catch (Exception ex) when (ex.Message == exceptionMessage)
+        {
+
         }
 
-        //[Fact] 
-        public async Task Should_Rollback_Transaction_On_Failure()
+        await UsingDbContextAsync(async context =>
         {
-            const string exceptionMessage = "This is a test exception!";
-
-            var blogName = Guid.NewGuid().ToString("N");
-
-            try
-            {
-                using (_uowManager.Begin())
-                {
-                    await _blogRepository.InsertAsync(
-                        new Blog(blogName, $"http://{blogName}.com/")
-                        );
-
-                    throw new ApplicationException(exceptionMessage);
-                }
-            }
-            catch (ApplicationException ex) when (ex.Message == exceptionMessage)
-            {
-
-            }
-            
-            await UsingDbContextAsync(async context =>
-            {
-                var blog = await context.Blogs.FirstOrDefaultAsync(b => b.Name == blogName);
-                blog.ShouldNotBeNull();
-            });
-        }
+            var blog = await context.Blogs.FirstOrDefaultAsync(b => b.Name == blogName);
+            blog.ShouldBeNull();
+        });
     }
 }

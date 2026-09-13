@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Reflection;
 
 namespace Abp.Collections
 {
@@ -57,6 +58,17 @@ namespace Abp.Collections
         public void Add<T>() where T : TBaseType
         {
             _typeList.Add(typeof(T));
+        }
+
+        public bool TryAdd<T>() where T : TBaseType
+        {
+            if (Contains<T>())
+            {
+                return false;
+            }
+
+            Add<T>();
+            return true;
         }
 
         /// <inheritdoc/>
@@ -133,7 +145,7 @@ namespace Abp.Collections
 
         private static void CheckType(Type item)
         {
-            if (!typeof(TBaseType).IsAssignableFrom(item))
+            if (!typeof(TBaseType).GetTypeInfo().IsAssignableFrom(item))
             {
                 throw new ArgumentException("Given item is not type of " + typeof(TBaseType).AssemblyQualifiedName, "item");
             }

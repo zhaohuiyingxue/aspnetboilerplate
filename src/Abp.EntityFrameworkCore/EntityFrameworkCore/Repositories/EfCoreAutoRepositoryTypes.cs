@@ -1,20 +1,18 @@
 using Abp.Domain.Repositories;
-using Abp.EntityFramework;
 
-namespace Abp.EntityFrameworkCore.Repositories
+namespace Abp.EntityFrameworkCore.Repositories;
+
+public static class EfCoreAutoRepositoryTypes
 {
-    public static class EfCoreAutoRepositoryTypes
-    {
-        public static AutoRepositoryTypesAttribute Default { get; private set; }
+    public static AutoRepositoryTypesAttribute Default { get; }
 
-        static EfCoreAutoRepositoryTypes()
-        {
-            Default = new AutoRepositoryTypesAttribute(
-                typeof(IRepository<>),
-                typeof(IRepository<,>),
-                typeof(EfCoreRepositoryBase<,>),
-                typeof(EfCoreRepositoryBase<,,>)
-            );
-        }
+    static EfCoreAutoRepositoryTypes()
+    {
+        Default = new AutoRepositoryTypesAttribute(
+            typeof(IRepository<>),
+            typeof(IRepository<,>),
+            typeof(EfCoreRepositoryBase<,>),
+            typeof(EfCoreRepositoryBase<,,>)
+        );
     }
 }

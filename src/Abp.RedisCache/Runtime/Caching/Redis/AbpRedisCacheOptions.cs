@@ -1,20 +1,43 @@
 ﻿using System.Configuration;
+using Abp.Configuration.Startup;
 using Abp.Extensions;
 
 namespace Abp.Runtime.Caching.Redis
 {
     public class AbpRedisCacheOptions
     {
+        public IAbpStartupConfiguration AbpStartupConfiguration { get; }
+
         private const string ConnectionStringKey = "Abp.Redis.Cache";
+
         private const string DatabaseIdSettingKey = "Abp.Redis.Cache.DatabaseId";
 
         public string ConnectionString { get; set; }
+
         public int DatabaseId { get; set; }
 
+        public string OnlineClientsStoreKey = "Abp.RealTime.OnlineClients";
+
+        public string KeyPrefix { get; set; }
+
+        public bool TenantKeyEnabled { get; set; }
+
+        /// <summary>
+        /// Required for serialization
+        /// </summary>
         public AbpRedisCacheOptions()
         {
+            
+        }
+        
+        public AbpRedisCacheOptions(IAbpStartupConfiguration abpStartupConfiguration)
+        {
+            AbpStartupConfiguration = abpStartupConfiguration;
+
             ConnectionString = GetDefaultConnectionString();
             DatabaseId = GetDefaultDatabaseId();
+            KeyPrefix = "";
+            TenantKeyEnabled = false;
         }
 
         private static int GetDefaultDatabaseId()
@@ -44,5 +67,7 @@ namespace Abp.Runtime.Caching.Redis
 
             return connStr.ConnectionString;
         }
+
+        
     }
 }

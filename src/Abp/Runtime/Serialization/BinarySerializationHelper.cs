@@ -86,13 +86,18 @@ namespace Abp.Runtime.Serialization
             return CreateBinaryFormatter(true).Deserialize(stream);
         }
 
+        /// <summary>
+        /// TODO@NET9.0 -> See https://learn.microsoft.com/en-us/dotnet/standard/serialization/binaryformatter-migration-guide/
+        /// </summary>
+        /// <param name="extended"></param>
+        /// <returns></returns>
         private static BinaryFormatter CreateBinaryFormatter(bool extended = false)
         {
             if (extended)
             {
                 return new BinaryFormatter
                 {
-                    AssemblyFormat = System.Runtime.Serialization.Formatters.FormatterAssemblyStyle.Simple,
+                    //TODO: AssemblyFormat = System.Runtime.Serialization.Formatters.FormatterAssemblyStyle.Simple,
                     Binder = new ExtendedSerializationBinder()
                 };
             }

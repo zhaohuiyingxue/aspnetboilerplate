@@ -1,90 +1,88 @@
-﻿using Abp.Localization;
-using Abp.Modules;
+using System;
 using System.Reflection;
 using Abp.Configuration.Startup;
+using Abp.Localization;
+using Abp.Modules;
 using Abp.Reflection;
 using AutoMapper;
 using Castle.MicroKernel.Registration;
 
-namespace Abp.AutoMapper
+namespace Abp.AutoMapper;
+
+[DependsOn(typeof(AbpKernelModule))]
+public class AbpAutoMapperModule : AbpModule
 {
-    [DependsOn(typeof(AbpKernelModule))]
-    public class AbpAutoMapperModule : AbpModule
+    private readonly ITypeFinder _typeFinder;
+
+    public AbpAutoMapperModule(ITypeFinder typeFinder)
     {
-        private readonly ITypeFinder _typeFinder;
+        _typeFinder = typeFinder;
+    }
 
-        private static bool _createdMappingsBefore;
+    public override void PreInitialize()
+    {
+        IocManager.Register<IAbpAutoMapperConfiguration, AbpAutoMapperConfiguration>();
 
-        private static readonly object SyncObj = new object();
+        Configuration.ReplaceService<ObjectMapping.IObjectMapper, AutoMapperObjectMapper>();
 
-        public AbpAutoMapperModule(ITypeFinder typeFinder)
+        Configuration.Modules.AbpAutoMapper().Configurators.Add(CreateCoreMappings);
+    }
+
+    public override void PostInitialize()
+    {
+        CreateMappings();
+    }
+
+    private void CreateMappings()
+    {
+        Action<IMapperConfigurationExpression> configurer = configuration =>
         {
-            _typeFinder = typeFinder;
-        }
-
-        public override void PreInitialize()
-        {
-            IocManager.Register<IAbpAutoMapperConfiguration, AbpAutoMapperConfiguration>();
-
-            Configuration.ReplaceService<ObjectMapping.IObjectMapper, AutoMapperObjectMapper>();
-
-            Configuration.Modules.AbpAutoMapper().Configurators.Add(CreateCoreMappings);
-        }
-
-        public override void PostInitialize()
-        {
-            CreateMappings();
-
-            IocManager.IocContainer.Register(
-                Component.For<IMapper>().Instance(Mapper.Instance).LifestyleSingleton()
-            );
-        }
-
-        public void CreateMappings()
-        {
-            lock (SyncObj)
+            FindAndAutoMapTypes(configuration);
+            foreach (var configurator in Configuration.Modules.AbpAutoMapper().Configurators)
             {
-                //We should prevent duplicate mapping in an application, since Mapper is static.
-                if (_createdMappingsBefore)
-                {
-                    return;
-                }
-
-                Mapper.Initialize(configuration =>
-                {
-                    FindAndAutoMapTypes(configuration);
-                    foreach (var configurator in Configuration.Modules.AbpAutoMapper().Configurators)
-                    {
-                        configurator(configuration);
-                    }
-                });
-
-                _createdMappingsBefore = true;
+                configurator(configuration);
             }
-        }
+        };
 
-        private void FindAndAutoMapTypes(IMapperConfigurationExpression configuration)
-        {
-            var types = _typeFinder.Find(type =>
-                    type.IsDefined(typeof(AutoMapAttribute)) ||
-                    type.IsDefined(typeof(AutoMapFromAttribute)) ||
-                    type.IsDefined(typeof(AutoMapToAttribute))
-            );
+        var config = new MapperConfiguration(configurer);
+        IocManager.IocContainer.Register(
+            Component.For<IConfigurationProvider>().Instance(config).LifestyleSingleton()
+        );
 
-            Logger.DebugFormat("Found {0} classes define auto mapping attributes", types.Length);
-            foreach (var type in types)
+        var mapper = config.CreateMapper();
+        IocManager.IocContainer.Register(
+            Component.For<IMapper>().Instance(mapper).LifestyleSingleton()
+        );
+#pragma warning disable CS0618 // Type or member is obsolete, this line will be removed once AutoMapper is updated
+        AbpEmulateAutoMapper.Mapper = mapper;
+#pragma warning restore CS0618 // Type or member is obsolete, this line will be removed once AutoMapper is updated
+    }
+
+    private void FindAndAutoMapTypes(IMapperConfigurationExpression configuration)
+    {
+        var types = _typeFinder.Find(type =>
             {
-                Logger.Debug(type.FullName);
-                configuration.CreateAbpAttributeMaps(type);
+                var typeInfo = type.GetTypeInfo();
+                return typeInfo.IsDefined(typeof(AutoMapAttribute)) ||
+                       typeInfo.IsDefined(typeof(AutoMapFromAttribute)) ||
+                       typeInfo.IsDefined(typeof(AutoMapToAttribute));
             }
-        }
+        );
 
-        private void CreateCoreMappings(IMapperConfigurationExpression configuration)
+        Logger.DebugFormat("Found {0} classes define auto mapping attributes", types.Length);
+
+        foreach (var type in types)
         {
-            var localizationContext = IocManager.Resolve<ILocalizationContext>();
-
-            configuration.CreateMap<ILocalizableString, string>().ConvertUsing(ls => ls?.Localize(localizationContext));
-            configuration.CreateMap<LocalizableString, string>().ConvertUsing(ls => ls == null ? null : localizationContext.LocalizationManager.GetString(ls));
+            Logger.Debug(type.FullName);
+            configuration.CreateAutoAttributeMaps(type);
         }
+    }
+
+    private void CreateCoreMappings(IMapperConfigurationExpression configuration)
+    {
+        var localizationContext = IocManager.Resolve<ILocalizationContext>();
+
+        configuration.CreateMap<ILocalizableString, string>().ConvertUsing(ls => ls == null ? null : ls.Localize(localizationContext));
+        configuration.CreateMap<LocalizableString, string>().ConvertUsing(ls => ls == null ? null : localizationContext.LocalizationManager.GetString(ls));
     }
 }

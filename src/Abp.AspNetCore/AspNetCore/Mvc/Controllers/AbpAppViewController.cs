@@ -1,20 +1,24 @@
-﻿using Abp.Auditing;
+using System;
+using Abp.Auditing;
+using Abp.Domain.Uow;
+using Abp.Extensions;
+using Abp.Runtime.Validation;
 using Microsoft.AspNetCore.Mvc;
 
-namespace Abp.AspNetCore.Mvc.Controllers
-{
-    //TODO: Maybe it's better to write an HTTP handler for that instead of controller (since it's more light)
-    public class AbpAppViewController : AbpController
-    {
-        [DisableAuditing]
-        public ActionResult Load(string viewUrl)
-        {
-            if (!viewUrl.StartsWith("~"))
-            {
-                viewUrl = "~" + viewUrl;
-            }
+namespace Abp.AspNetCore.Mvc.Controllers;
 
-            return View(viewUrl);
+public class AbpAppViewController : AbpController
+{
+    [DisableAuditing]
+    [DisableValidation]
+    [UnitOfWork(IsDisabled = true)]
+    public ActionResult Load(string viewUrl)
+    {
+        if (viewUrl.IsNullOrEmpty())
+        {
+            throw new ArgumentNullException(nameof(viewUrl));
         }
+
+        return View(viewUrl.EnsureStartsWith('~'));
     }
 }
